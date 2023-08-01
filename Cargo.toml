@@ -12,3 +12,4 @@ colored = "2.0.4"
 serde = { version = "1.0.179", features = ["serde_derive"] }
 tokio = { version = "1.29.1", features = ["full"] }
 tower = "0.4.13"
+tower-http = { version = "0.4.3", features = ["fs"] }

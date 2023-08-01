@@ -1,6 +1,6 @@
 use std::{future::Future, pin::Pin};
 
-use axum::http::Request;
+use axum::http::{Request, Response, StatusCode};
 use chrono::Utc;
 use colored::Colorize;
 use tower::{Layer, Service};
@@ -16,9 +16,9 @@ impl<T> Log<T> {
     }
 }
 
-impl<T, ReqBody> Service<Request<ReqBody>> for Log<T>
+impl<T, ReqBody, ResBody> Service<Request<ReqBody>> for Log<T>
 where
-    T: Service<Request<ReqBody>> + Send + Clone + 'static,
+    T: Service<Request<ReqBody>, Response = Response<ResBody>> + Send + Clone + 'static,
     <T as Service<Request<ReqBody>>>::Future: Send + 'static,
     ReqBody: Send + 'static,
 {
@@ -42,15 +42,33 @@ where
 
         Box::pin(async move {
             let res = inner.call(req).await;
-            let status = if res.is_ok() {
-                "SUCCESS".green()
-            } else {
-                "ERROR".red()
-            };
+            let (message, status) = res
+                .as_ref()
+                .map(|response| response.status())
+                .map(|status| {
+                    (
+                        if status.is_success() {
+                            "SUCCESS".green()
+                        } else if status.is_informational() {
+                            "INFORMATION".blue()
+                        } else if status.is_redirection() {
+                            "REDIRECTION".bright_blue()
+                        } else if status.is_client_error() {
+                            "CLIENT ERROR".red()
+                        } else if status.is_server_error() {
+                            "SERVER ERROR".red()
+                        } else {
+                            "INTERNAL ERROR".red()
+                        },
+                        status,
+                    )
+                })
+                .unwrap_or_else(|_| ("INTERNAL ERROR".red(), StatusCode::INTERNAL_SERVER_ERROR));
             println!(
-                "[{}] {} {} -> {}",
+                "[{}] {} {} / {} -> {}",
                 Utc::now().to_rfc3339().underline(),
                 status,
+                message,
                 req_method.yellow(),
                 req_uri.bright_blue(),
             );

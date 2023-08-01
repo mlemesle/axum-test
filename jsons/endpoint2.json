@@ -1,0 +1,45 @@
+{
+  "_id": "64c8b2b9d656287ef8508755",
+  "index": 0,
+  "guid": "791aa4f0-c282-4ca3-ae78-cc39d7630653",
+  "isActive": true,
+  "balance": "$2,418.83",
+  "picture": "http://placehold.it/32x32",
+  "age": 25,
+  "eyeColor": "green",
+  "name": "Ebony Craig",
+  "gender": "female",
+  "company": "SUNCLIPSE",
+  "email": "ebonycraig@sunclipse.com",
+  "phone": "+1 (982) 520-2151",
+  "address": "270 Dewitt Avenue, Veguita, Delaware, 7711",
+  "about": "Amet adipisicing id ea aliqua est ullamco minim laborum tempor ullamco anim dolor qui labore. Voluptate veniam do tempor incididunt elit. Minim ut aute cillum duis incididunt nulla reprehenderit. Sunt fugiat anim esse commodo mollit consequat commodo cupidatat commodo. Exercitation ullamco pariatur exercitation in reprehenderit officia do. Deserunt duis irure laborum culpa in in.\r\n",
+  "registered": "2016-03-10T12:20:11 -01:00",
+  "latitude": 27.862768,
+  "longitude": 177.802065,
+  "tags": [
+    "ex",
+    "incididunt",
+    "ea",
+    "ut",
+    "in",
+    "mollit",
+    "adipisicing"
+  ],
+  "friends": [
+    {
+      "id": 0,
+      "name": "Fleming Landry"
+    },
+    {
+      "id": 1,
+      "name": "Simmons Curtis"
+    },
+    {
+      "id": 2,
+      "name": "Grace Valdez"
+    }
+  ],
+  "greeting": "Hello, Ebony Craig! You have 2 unread messages.",
+  "favoriteFruit": "banana"
+}

@@ -1,27 +1,15 @@
-use axum::{extract::Query, http::StatusCode, routing::get, Router};
+use axum::Router;
 use layers::log::LogLayer;
-use serde::Deserialize;
-use tower::ServiceBuilder;
+
+use tower_http::services::ServeDir;
 
 mod layers;
 
-#[derive(Deserialize)]
-struct Q {
-    success: bool,
-}
-
-async fn do_it(Query(q): Query<Q>) -> Result<(), StatusCode> {
-    if q.success {
-        Ok(())
-    } else {
-        Err(StatusCode::NOT_ACCEPTABLE)
-    }
-}
-
 #[tokio::main]
 async fn main() {
-    let app = Router::new().route("/", get(do_it)).layer(LogLayer);
-    // let app = ServiceBuilder::new().layer(LogLayer).service(app);
+    let app = Router::new()
+        .nest_service("/", ServeDir::new("jsons/"))
+        .layer(LogLayer);
 
     axum::Server::bind(&"0.0.0.0:3000".parse().unwrap())
         .serve(app.into_make_service())

@@ -1,0 +1,45 @@
+{
+  "_id": "64c8b2dd2a0046f7328e070c",
+  "index": 0,
+  "guid": "ef66cf97-6bd2-427d-ad1e-3b9b8d74c9ae",
+  "isActive": false,
+  "balance": "$1,216.69",
+  "picture": "http://placehold.it/32x32",
+  "age": 33,
+  "eyeColor": "green",
+  "name": "Maureen Norton",
+  "gender": "female",
+  "company": "AVENETRO",
+  "email": "maureennorton@avenetro.com",
+  "phone": "+1 (889) 518-2129",
+  "address": "544 Willow Street, Catherine, Pennsylvania, 1668",
+  "about": "Qui mollit labore eiusmod incididunt voluptate cillum do tempor aliquip consectetur fugiat amet reprehenderit in. Eu occaecat anim magna sunt occaecat incididunt nostrud labore esse. Anim sit commodo dolore excepteur non laboris. Ad ipsum amet minim est veniam est laboris ut pariatur dolore esse. Eu fugiat nisi velit quis pariatur qui reprehenderit anim eu non veniam. Exercitation nisi Lorem ullamco eiusmod est amet laborum fugiat nostrud eiusmod ullamco.\r\n",
+  "registered": "2019-12-25T07:41:41 -01:00",
+  "latitude": -67.145299,
+  "longitude": 24.927771,
+  "tags": [
+    "irure",
+    "ullamco",
+    "qui",
+    "voluptate",
+    "nisi",
+    "adipisicing",
+    "est"
+  ],
+  "friends": [
+    {
+      "id": 0,
+      "name": "Earline Manning"
+    },
+    {
+      "id": 1,
+      "name": "Earnestine Goff"
+    },
+    {
+      "id": 2,
+      "name": "Bonner Thompson"
+    }
+  ],
+  "greeting": "Hello, Maureen Norton! You have 1 unread messages.",
+  "favoriteFruit": "strawberry"
+}
