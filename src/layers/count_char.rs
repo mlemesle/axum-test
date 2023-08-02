@@ -1,7 +1,7 @@
 use std::{future::Future, pin::Pin};
 
 use axum::{
-    body::{BoxBody, HttpBody},
+    body::{BoxBody, Bytes, HttpBody},
     http::{Request, Response},
 };
 use hyper::Body;
@@ -21,14 +21,12 @@ impl<T> CountChar<T> {
 
 impl<T, ReqBody> Service<Request<ReqBody>> for CountChar<T>
 where
-    T: Service<Request<ReqBody>, Response = Response<BoxBody>> + Send + Clone + 'static,
-    <T as Service<Request<ReqBody>>>::Future: Send + 'static,
-    <T as Service<Request<ReqBody>>>::Error: Send,
-    ReqBody: Send + 'static,
-    // ResBody: HttpBody + Send,
-    // <ResBody as HttpBody>::Error: std::fmt::Debug,
-    // Req: HttpBody + Clone,
-    // Resp: HttpBody + Clone,
+    T: Service<Request<BoxBody>, Response = Response<BoxBody>> + Send + Clone + 'static,
+    <T as Service<Request<BoxBody>>>::Future: Send + 'static,
+    <T as Service<Request<BoxBody>>>::Error: Send,
+    ReqBody: HttpBody + Send + 'static,
+    <ReqBody as HttpBody>::Data: Send,
+    <ReqBody as HttpBody>::Error: std::fmt::Debug,
 {
     type Response = T::Response;
 
@@ -49,16 +47,28 @@ where
         let c = Some(self.c);
 
         Box::pin(async move {
-            let res = inner.call(req).await;
+            let (headers, body) = req.into_parts();
+            let bytes = hyper::body::to_bytes(body).await.unwrap();
+            println!(
+                "Request payload has {} {}",
+                count_chars(&bytes, c),
+                c.as_ref().unwrap()
+            );
+            let res = inner
+                .call(Request::from_parts(
+                    headers,
+                    Body::from(bytes).map_err(axum::Error::new).boxed_unsync(),
+                ))
+                .await;
             match res {
                 Ok(response) => {
                     let (headers, body) = response.into_parts();
                     let bytes = hyper::body::to_bytes(body).await.unwrap();
-                    let nb_char = bytes
-                        .iter()
-                        .filter(|b| char::from_u32(**b as u32) == c)
-                        .count();
-                    println!("There are {nb_char} {} in the payload", c.unwrap());
+                    println!(
+                        "Response payload has {} {}",
+                        count_chars(&bytes, c),
+                        c.as_ref().unwrap()
+                    );
                     Ok(Response::from_parts(
                         headers,
                         Body::from(bytes).map_err(axum::Error::new).boxed_unsync(),
@@ -88,4 +98,11 @@ where
     fn layer(&self, inner: S) -> Self::Service {
         CountChar::new(inner, self.0)
     }
+}
+
+fn count_chars(bytes: &Bytes, c: Option<char>) -> usize {
+    bytes
+        .iter()
+        .filter(|b| char::from_u32(**b as u32) == c)
+        .count()
 }
