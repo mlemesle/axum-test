@@ -1,5 +1,5 @@
 use axum::Router;
-use layers::log::LogLayer;
+use layers::{count_char::CountCharLayer, log::LogLayer};
 
 use tower_http::services::ServeDir;
 
@@ -9,6 +9,7 @@ mod layers;
 async fn main() {
     let app = Router::new()
         .nest_service("/", ServeDir::new("jsons/"))
+        .layer(CountCharLayer::new('f'))
         .layer(LogLayer);
 
     axum::Server::bind(&"0.0.0.0:3000".parse().unwrap())
