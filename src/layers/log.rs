@@ -1,12 +1,10 @@
-use std::{
-    future::Future,
-    pin::{pin, Pin},
-};
+use std::{future::Future, task::Poll};
 
 use axum::{
     body::BoxBody,
     http::{Request, Response, StatusCode},
 };
+
 use chrono::Utc;
 use colored::Colorize;
 use tower::{Layer, Service};
@@ -22,106 +20,97 @@ impl<T> Log<T> {
     }
 }
 
-struct DumbFut<F> {
-    f: F,
+#[pin_project::pin_project]
+pub struct LogFuture<F, E>
+where
+    F: Future<Output = Result<Response<BoxBody>, E>>,
+{
+    req_method: String,
+    req_uri: String,
+    #[pin]
+    resp_fut: F,
 }
 
-impl<T, Fut, F> DumbFut<F>
+impl<F, E> LogFuture<F, E>
 where
-    Fut: Future<Output = T>,
+    F: Future<Output = Result<Response<BoxBody>, E>>,
 {
-    fn new(f: F) -> Self {
-        Self { f }
+    fn new(req_method: String, req_uri: String, resp_fut: F) -> Self {
+        Self {
+            req_method,
+            req_uri,
+            resp_fut,
+        }
     }
 }
 
-impl<T, Fut> Future for DumbFut<Fut>
+impl<F, E> Future for LogFuture<F, E>
 where
-    Fut: Future<Output = T>,
+    F: Future<Output = Result<Response<BoxBody>, E>>,
 {
-    type Output = Fut::Output;
+    type Output = F::Output;
 
     fn poll(
-        self: Pin<&mut Self>,
+        self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Self::Output> {
-        let f = pin!(self.f);
-        f.poll(cx)
-    }
-}
-
-fn toto<S, Fut>(service: &Log<S>, req: Request<BoxBody>) -> impl Future<Output = Fut::Output> + '_
-where
-    Fut: Future<
-        Output = Result<
-            <S as Service<Request<BoxBody>>>::Response,
-            <S as Service<Request<BoxBody>>>::Error,
-        >,
-    >,
-    S: Service<Request<BoxBody>, Response = Response<BoxBody>, Future = Fut>
-        + Send
-        + Clone
-        + 'static,
-{
-    let mut inner = service.inner.clone();
-    async move {
-        let req_method = req.method().to_string();
-        let req_uri = req.uri().to_string();
-        let res = inner.call(req).await;
-        let (message, status) = res
-            .as_ref()
-            .map(|response| response.status())
-            .map(|status| {
-                (
-                    if status.is_success() {
-                        "SUCCESS".green()
-                    } else if status.is_informational() {
-                        "INFORMATION".blue()
-                    } else if status.is_redirection() {
-                        "REDIRECTION".bright_blue()
-                    } else if status.is_client_error() {
-                        "CLIENT ERROR".red()
-                    } else if status.is_server_error() {
-                        "SERVER ERROR".red()
-                    } else {
-                        "INTERNAL ERROR".red()
-                    },
+        let project = self.project();
+        match project.resp_fut.poll(cx) {
+            Poll::Ready(res) => {
+                let (message, status) = res
+                    .as_ref()
+                    .map(|response| response.status())
+                    .map(|status| {
+                        (
+                            if status.is_success() {
+                                "SUCCESS".green()
+                            } else if status.is_informational() {
+                                "INFORMATION".blue()
+                            } else if status.is_redirection() {
+                                "REDIRECTION".bright_blue()
+                            } else if status.is_client_error() {
+                                "CLIENT ERROR".red()
+                            } else if status.is_server_error() {
+                                "SERVER ERROR".red()
+                            } else {
+                                "INTERNAL ERROR".red()
+                            },
+                            status,
+                        )
+                    })
+                    .unwrap_or_else(|_| {
+                        ("INTERNAL ERROR".red(), StatusCode::INTERNAL_SERVER_ERROR)
+                    });
+                println!(
+                    "[{}] {} {} / {} -> {}",
+                    Utc::now().to_rfc3339().underline(),
                     status,
-                )
-            })
-            .unwrap_or_else(|_| ("INTERNAL ERROR".red(), StatusCode::INTERNAL_SERVER_ERROR));
-        println!(
-            "[{}] {} {} / {} -> {}",
-            Utc::now().to_rfc3339().underline(),
-            status,
-            message,
-            req_method.yellow(),
-            req_uri.bright_blue(),
-        );
-        res
+                    message,
+                    project.req_method.yellow(),
+                    project.req_uri.bright_blue(),
+                );
+                Poll::Ready(res)
+            }
+            Poll::Pending => Poll::Pending,
+        }
     }
 }
 
 impl<T, ReqBody, Fut> Service<Request<ReqBody>> for Log<T>
 where
-    T: Service<Request<ReqBody>, Response = Response<BoxBody>, Future = Fut>
-        + Send
-        + Clone
-        + 'static,
-    <T as Service<Request<ReqBody>>>::Future: Send + 'static,
-    ReqBody: Send + 'static,
+    T: Service<Request<ReqBody>, Response = Response<BoxBody>, Future = Fut>,
     Fut: Future<
-            Output = Result<
-                <T as Service<Request<ReqBody>>>::Response,
-                <T as Service<Request<ReqBody>>>::Error,
-            >,
-        > + Send,
+        Output = Result<
+            <T as Service<Request<ReqBody>>>::Response,
+            <T as Service<Request<ReqBody>>>::Error,
+        >,
+    >,
 {
     type Response = T::Response;
 
     type Error = T::Error;
 
-    type Future = DumbFut<Fut>;
+    type Future = LogFuture<Fut, <T as Service<Request<ReqBody>>>::Error>;
 
     fn poll_ready(
         &mut self,
@@ -131,9 +120,9 @@ where
     }
 
     fn call(&mut self, req: Request<ReqBody>) -> Self::Future {
-        let mut inner = self.inner.clone();
-
-        DumbFut::new(toto(self.inner, req))
+        let req_method = req.method().to_string();
+        let req_uri = req.uri().to_string();
+        LogFuture::new(req_method, req_uri, self.inner.call(req))
     }
 }
 

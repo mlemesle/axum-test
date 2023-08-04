@@ -10,6 +10,7 @@ axum = "0.6.19"
 chrono = "0.4.26"
 colored = "2.0.4"
 hyper = "0.14.27"
+pin-project = "1.1.2"
 serde = { version = "1.0.179", features = ["serde_derive"] }
 tokio = { version = "1.29.1", features = ["full"] }
 tower = "0.4.13"
