@@ -4,6 +4,7 @@ use layers::{count_char::CountCharLayer, log::LogLayer};
 use tower_http::services::ServeDir;
 
 mod layers;
+mod simple_future;
 
 #[tokio::main]
 async fn main() {
