@@ -44,20 +44,23 @@ impl Cache {
 type CacheGetFut = Pin<Box<(dyn Future<Output = Option<Bytes>> + Send + 'static)>>;
 type CacheSetFut = Pin<Box<(dyn Future<Output = Bytes> + Send + 'static)>>;
 
-enum State {
+enum State<InnerCallFut> {
     Init,
     CacheGet(CacheGetFut),
     CacheSet(CacheSetFut),
-    InnerCall,
+    InnerCall(Pin<Box<InnerCallFut>>),
 }
 
-impl Display for State {
+impl<T> Display for State<T>
+where
+    T: Future,
+{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             State::Init => f.write_str("[State::Init]"),
             State::CacheGet(_) => f.write_str("[State::CacheGet]"),
             State::CacheSet(_) => f.write_str("[State::CacheSet]"),
-            State::InnerCall => f.write_str("[State::InnerCall]"),
+            State::InnerCall(_) => f.write_str("[State::InnerCall]"),
         }
     }
 }
@@ -66,21 +69,24 @@ impl Display for State {
 pub struct CacheFuture<S, ReqBody>
 where
     S: Service<Request<ReqBody>, Response = Response<BoxBody>>,
+    S::Future: Future<Output = Result<S::Response, S::Error>>,
 {
-    state: State,
+    state: State<S::Future>,
     key: String,
-    inner_call: Option<Pin<Box<S::Future>>>,
+    service: S,
+    req: Option<Request<ReqBody>>,
 }
 
 impl<S, ReqBody> CacheFuture<S, ReqBody>
 where
     S: Service<Request<ReqBody>, Response = Response<BoxBody>>,
 {
-    fn new(key: String, inner_call: Option<Pin<Box<S::Future>>>) -> Self {
+    fn new(key: String, service: S, req: Request<ReqBody>) -> Self {
         Self {
             state: State::Init,
             key,
-            inner_call,
+            service,
+            req: Some(req),
         }
     }
 }
@@ -114,7 +120,8 @@ where
                     }
                     Poll::Ready(None) => {
                         println!("MISS, proceed to Inner");
-                        *project.state = State::InnerCall;
+                        let req = project.req.take().unwrap();
+                        *project.state = State::InnerCall(Box::pin(project.service.call(req)));
                     }
                     Poll::Pending => {
                         println!("PENDING");
@@ -131,7 +138,7 @@ where
                         return Poll::Pending;
                     }
                 },
-                State::InnerCall => match project.inner_call.as_mut().unwrap().as_mut().poll(cx) {
+                State::InnerCall(inner_fut) => match inner_fut.as_mut().poll(cx) {
                     Poll::Ready(Ok(response)) => {
                         println!("OK, set in cache");
                         let body = response.into_body();
@@ -166,9 +173,9 @@ impl<S> CacheService<S> {
 
 impl<S, ReqBody> Service<Request<ReqBody>> for CacheService<S>
 where
-    S: Service<Request<ReqBody>, Response = Response<BoxBody>> + Send,
+    S: Service<Request<ReqBody>, Response = Response<BoxBody>> + Send + Clone,
     S::Future: Send + 'static,
-    ReqBody: HttpBody + Send + 'static, // S::Future: Future<Output = Result<S::Response, S::Error>>,
+    ReqBody: HttpBody + Send + 'static,
 {
     type Response = S::Response;
 
@@ -184,7 +191,7 @@ where
     }
 
     fn call(&mut self, req: Request<ReqBody>) -> Self::Future {
-        CacheFuture::new(req.uri().to_string(), Some(Box::pin(self.inner.call(req))))
+        CacheFuture::new(req.uri().to_string(), self.inner.clone(), req)
     }
 }
 
