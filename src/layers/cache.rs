@@ -1,5 +1,10 @@
 use std::{
-    collections::HashMap, fmt::Display, future::Future, pin::Pin, sync::OnceLock, task::Poll,
+    collections::HashMap,
+    fmt::Display,
+    future::Future,
+    pin::Pin,
+    sync::{Arc, Mutex, OnceLock},
+    task::Poll,
 };
 
 use axum::{
@@ -73,7 +78,7 @@ where
 {
     state: State<S::Future>,
     key: String,
-    service: S,
+    service: Arc<Mutex<S>>,
     req: Option<Request<ReqBody>>,
 }
 
@@ -81,7 +86,7 @@ impl<S, ReqBody> CacheFuture<S, ReqBody>
 where
     S: Service<Request<ReqBody>, Response = Response<BoxBody>>,
 {
-    fn new(key: String, service: S, req: Request<ReqBody>) -> Self {
+    fn new(key: String, service: Arc<Mutex<S>>, req: Request<ReqBody>) -> Self {
         Self {
             state: State::Init,
             key,
@@ -121,7 +126,8 @@ where
                     Poll::Ready(None) => {
                         println!("MISS, proceed to Inner");
                         let req = project.req.take().unwrap();
-                        *project.state = State::InnerCall(Box::pin(project.service.call(req)));
+                        *project.state =
+                            State::InnerCall(Box::pin(project.service.lock().unwrap().call(req)));
                     }
                     Poll::Pending => {
                         println!("PENDING");
@@ -162,18 +168,20 @@ where
 
 #[derive(Clone)]
 pub struct CacheService<S> {
-    inner: S,
+    inner: Arc<Mutex<S>>,
 }
 
 impl<S> CacheService<S> {
     fn new(inner: S) -> Self {
-        Self { inner }
+        Self {
+            inner: Arc::new(Mutex::new(inner)),
+        }
     }
 }
 
 impl<S, ReqBody> Service<Request<ReqBody>> for CacheService<S>
 where
-    S: Service<Request<ReqBody>, Response = Response<BoxBody>> + Send + Clone,
+    S: Service<Request<ReqBody>, Response = Response<BoxBody>> + Send,
     S::Future: Send + 'static,
     ReqBody: HttpBody + Send + 'static,
 {
@@ -187,7 +195,7 @@ where
         &mut self,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), Self::Error>> {
-        self.inner.poll_ready(cx)
+        self.inner.lock().unwrap().poll_ready(cx)
     }
 
     fn call(&mut self, req: Request<ReqBody>) -> Self::Future {
